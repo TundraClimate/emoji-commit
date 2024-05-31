@@ -1,0 +1,8 @@
+[package]
+name = "ec"
+version = "1.0.0"
+authors = ["Tundra_Climate"]
+description = "Create a commit using emojis"
+edition = "2021"
+
+[dependencies]
