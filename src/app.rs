@@ -1,49 +1,57 @@
 use crate::command_processor;
-use clap::Args;
+use crate::Args;
 use std::error::Error;
 use std::fs;
+use std::fs::File;
 use std::fs::OpenOptions;
+use std::io::BufReader;
 
-pub struct App<A: Args> {
-    args: A,
+pub struct App {
+    args: Args,
     is_edit: bool,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct PrefMap {
+    key: String,
+    prefix: String,
 }
 
 const DEFAULT_CONF_FILE: &str = r#"
 [
     {
         "key": "feat",
-        "prefix": ":sparkles:feat: "
+        "prefix": "✨feat: "
     },
     {
         "key": "fix",
-        "prefix": ":zap:fix: "
+        "prefix": "⚡️fix: "
     },
     {
         "key": "refactor",
-        "prefix": ":recycle:refactor: "
+        "prefix": "♻️refactor: "
     },
     {
         "key": "docs",
-        "prefix": ":memo:docs: "
+        "prefix": "📝docs: "
     },
     {
         "key": "wip",
-        "prefix": ":fire:wip: "
+        "prefix": "🔥wip: "
     },
     {
         "key": "chore",
-        "prefix": ":pencil2:chore: "
+        "prefix": "✏️chore: "
     }
 ]
 "#;
 
-impl<A: Args> App<A> {
-    pub fn new(args: A, is_edit: bool) -> App<A> {
+impl App {
+    pub fn new(args: Args, is_edit: bool) -> App {
         App { args, is_edit }
     }
 
-    pub fn init(self) -> Result<App<A>, Box<dyn Error>> {
+    pub fn init(self) -> Result<App, Box<dyn Error>> {
         if let Some(dir) = dirs::config_dir() {
             let conf_dir = dir.join("emoji-commit");
             if !conf_dir.exists() {
@@ -66,6 +74,24 @@ impl<A: Args> App<A> {
         if eflag {
             command_processor::open_editor();
         } else {
+            let args = (self.args.prefix, self.args.msg);
+            if let (Some(key), Some(msg)) = args {
+                if let Some(conf_path) = dirs::config_dir() {
+                    let conf_path = conf_path.join("emoji-commit").join("config.json");
+                    let json: Vec<PrefMap> =
+                        serde_json::from_reader(BufReader::new(File::open(conf_path).unwrap()))
+                            .expect("Could not open config");
+                    let msgs: Vec<_> = json.into_iter().filter(|p| p.key == key).collect();
+                    if msgs.len() != 0 {
+                        let msg = format!("{}{}", &msgs[0].prefix, msg);
+                        command_processor::git_commit(msg);
+                    } else {
+                        eprintln!("Could not create commit: invalid arguments \"{}\"", key);
+                    }
+                }
+            } else {
+                eprintln!("Could not create commit: invalid arguments");
+            }
         }
     }
 }

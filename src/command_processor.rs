@@ -14,3 +14,12 @@ pub fn open_editor() {
             .expect("Could not open editor");
     }
 }
+
+pub fn git_commit(msg: String) {
+    Command::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg(msg)
+        .status()
+        .expect("Could not create commit");
+}
