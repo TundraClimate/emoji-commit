@@ -1,6 +1,8 @@
 mod app;
 pub use app::App;
 
+pub mod command_processor;
+
 use clap::Parser;
 
 #[derive(Parser, Debug)]
