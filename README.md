@@ -5,12 +5,11 @@ Create a commit using emojis
 # install
 
 ```
-git clone https://github.com/TundraClimate/emoji-commit
+$ git clone https://github.com/TundraClimate/emoji-commit
 
-cd emoji-commit/
-cargo build -r
+$ cd emoji-commit/
 
-sudo ln -s $PWD/target/release/ec /usr/local/bin/ec
+$ cargo install --path .
 ```
 
 # how to use
