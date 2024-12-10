@@ -17,6 +17,15 @@ pub struct Args {
     /// Edit ec config
     #[arg(short, long)]
     edit: bool,
+
+    #[arg(long)]
+    set_profile: Option<String>,
+
+    #[arg(long)]
+    delete_profile: Option<String>,
+
+    #[arg(long)]
+    list_profile: bool,
 }
 
 impl Args {
