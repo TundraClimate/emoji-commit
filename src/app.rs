@@ -97,7 +97,18 @@ impl App {
 
     pub fn run_app(self) {
         if self.is_edit {
-            command_processor::open_editor();
+            let Some(conf_dir) = dirs::config_dir() else {
+                eprintln!("Cannot find config directory");
+                return;
+            };
+            let conf_dir = conf_dir.join("emoji-commit");
+            let Ok(Config { profile }) = serde_json::from_reader(BufReader::new(
+                File::open(conf_dir.join("config.json")).unwrap(),
+            )) else {
+                eprintln!("Could not open config file");
+                return;
+            };
+            command_processor::open_editor(&profile);
         } else if let Some(new_profile) = self.args.set_profile {
             let Some(conf_dir) = dirs::config_dir() else {
                 eprintln!("Cannot find config directory");

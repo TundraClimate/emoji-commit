@@ -18,13 +18,13 @@ pub struct Args {
     #[arg(short, long)]
     edit: bool,
 
-    #[arg(long)]
+    #[arg(short = 'S', long)]
     set_profile: Option<String>,
 
-    #[arg(long)]
+    #[arg(short = 'D', long)]
     delete_profile: Option<String>,
 
-    #[arg(long)]
+    #[arg(short = 'L', long)]
     list_profile: bool,
 }
 
