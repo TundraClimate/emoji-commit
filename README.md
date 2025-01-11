@@ -26,9 +26,13 @@ Arguments:
   [MSG]     Commit message
 
 Options:
-  -e, --edit     Edit ec config
-  -h, --help     Print help
-  -V, --version  Print version
+  -e, --edit                             Edit ec config
+  -S, --set-profile <SET_PROFILE>
+  -D, --delete-profile <DELETE_PROFILE>
+  -L, --list-profile
+  -l
+  -h, --help                             Print help
+  -V, --version                          Print version
 ```
 
 ```sh
@@ -38,4 +42,10 @@ ec -e
 
 ```
 ec feat "features commit message"
+```
+
+## zsh-completion
+
+```
+sudo curl https://raw.githubusercontent.com/TundraClimate/emoji-commit/refs/heads/master/_ec -o /usr/local/share/zsh/site-functions/_ec
 ```
