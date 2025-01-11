@@ -14,10 +14,12 @@ _ec_completion() {
     '--delete-profile[Delete profile]: :->profiles'
     '-D[Delete profile]: :->profiles'
     '-L[Show profile list]'
-    '-list-profile[Show profile list]'
+    '--list-profile[Show profile list]'
+    '-l[Show tag list]'
   )
 
   _arguments -C \
+    "${opt[@]}" \
     "1: :->prof" \
     "*:: :->args"
 
@@ -31,8 +33,6 @@ _ec_completion() {
       _message "Commit message here"
       ;;
     esac
-
-    _arguments "${options[@]}"
 }
 
 compdef _ec_completion ec
