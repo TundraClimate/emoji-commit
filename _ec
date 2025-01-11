@@ -1,0 +1,38 @@
+#compdef ec
+
+_ec_completion() {
+  local -a opt
+  opt=(
+    '-h[Print help]'
+    '--help[Print help]'
+    '-V[Print version]'
+    '--version[Print version]'
+    '-e[Edit ec config]'
+    '--edit[Edit ec config]'
+    '-S[Set profile]: :->profiles'
+    '--set-profile[Set profile]: :->profiles'
+    '--delete-profile[Delete profile]: :->profiles'
+    '-D[Delete profile]: :->profiles'
+    '-L[Show profile list]'
+    '-list-profile[Show profile list]'
+  )
+
+  _arguments -C \
+    "1: :->prof" \
+    "*:: :->args"
+
+  case $state in
+    prof)
+      local -a list
+      list=("${(@f)$(ec -l)}")
+      _describe "Tags" list
+      ;;
+    args)
+      _message "Commit message here"
+      ;;
+    esac
+
+    _arguments "${options[@]}"
+}
+
+compdef _ec_completion ec
