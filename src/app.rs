@@ -187,6 +187,28 @@ impl App {
                 }
             });
         } else if self.args.list_tags {
+            let Some(conf_dir) = dirs::config_dir() else {
+                eprintln!("Cannot find config directory");
+                return;
+            };
+            let conf_dir = conf_dir.join("emoji-commit");
+            let Ok(Config { profile }) = serde_json::from_reader(BufReader::new(
+                File::open(conf_dir.join("config.json")).unwrap(),
+            )) else {
+                eprintln!("Could not open config file");
+                return;
+            };
+            let profile_path = conf_dir.join("profile").join(format!("{}.json", &profile));
+            let Ok(prefs): Result<Vec<PrefMap>, _> =
+                serde_json::from_reader(BufReader::new(File::open(profile_path).unwrap()))
+            else {
+                eprintln!("Could not open profile file");
+                return;
+            };
+            let prefs: Vec<_> = prefs.into_iter().map(|p| p.key).collect();
+            prefs.iter().for_each(|p| {
+                println!("{p}");
+            });
         } else {
             let args = (self.args.prefix, self.args.msg);
             if let (Some(key), Some(msg)) = args {

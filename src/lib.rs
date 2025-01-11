@@ -26,6 +26,9 @@ pub struct Args {
 
     #[arg(short = 'L', long)]
     list_profile: bool,
+
+    #[arg(short = 'l')]
+    list_tags: bool,
 }
 
 impl Args {
