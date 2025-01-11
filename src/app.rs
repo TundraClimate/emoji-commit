@@ -108,7 +108,7 @@ impl App {
                 eprintln!("Could not open config file");
                 return;
             };
-            command_processor::open_editor(&profile);
+            command_processor::open_editor(&format!("{}.json", &profile));
         } else if let Some(new_profile) = self.args.set_profile {
             let Some(conf_dir) = dirs::config_dir() else {
                 eprintln!("Cannot find config directory");
@@ -186,6 +186,7 @@ impl App {
                     }
                 }
             });
+        } else if self.args.list_tags {
         } else {
             let args = (self.args.prefix, self.args.msg);
             if let (Some(key), Some(msg)) = args {
