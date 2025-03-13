@@ -1,12 +1,12 @@
-use crate::command_processor;
+use crate::cmd;
 use crate::Args;
 use serde_json::json;
 use serde_json::Value;
 use std::error::Error;
 use std::fs;
 use std::fs::File;
-use std::fs::OpenOptions;
 use std::io::BufReader;
+use std::path::Path;
 use std::sync::LazyLock;
 
 pub struct App {
@@ -25,13 +25,13 @@ struct Config {
     profile: String,
 }
 
-const DEFAULT_CONF_FILE: LazyLock<Value> = LazyLock::new(|| {
+static DEFAULT_CONF_FILE: LazyLock<Value> = LazyLock::new(|| {
     json!(Config {
         profile: "default".to_string()
     })
 });
 
-const DEFAULT_PROFILE: LazyLock<Value> = LazyLock::new(|| {
+static DEFAULT_PROFILE: LazyLock<Value> = LazyLock::new(|| {
     json!([
         {
             "key": "feat",
@@ -60,192 +60,224 @@ const DEFAULT_PROFILE: LazyLock<Value> = LazyLock::new(|| {
     ])
 });
 
+fn config_dir_path() -> std::path::PathBuf {
+    dirs::config_dir().unwrap_or_else(|| {
+        eprintln!("ec terminated: Not supported OS");
+        std::process::exit(1);
+    })
+}
+
 impl App {
     pub fn new(args: Args, is_edit: bool) -> App {
         App { args, is_edit }
     }
 
     pub fn init(self) -> Result<App, Box<dyn Error>> {
-        if let Some(dir) = dirs::config_dir() {
-            let conf_dir = dir.join("emoji-commit");
-            if !conf_dir.exists() {
-                fs::create_dir_all(&conf_dir)?;
-            }
-            let conf_path = conf_dir.join("config.json");
-            if !conf_path.exists() {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .open(&conf_path)?;
-                fs::write(&conf_path, DEFAULT_CONF_FILE.to_string())?;
-            }
-            let prof_path = conf_dir.join("profile");
-            if !prof_path.exists() {
-                fs::create_dir_all(&prof_path)?;
-            }
-            let default_prof_path = prof_path.join("default.json");
-            if !default_prof_path.exists() {
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .open(&default_prof_path)?;
-                fs::write(&default_prof_path, DEFAULT_PROFILE.to_string())?;
-            }
+        let conf_dir = config_dir_path().join("emoji-commit");
+
+        if !conf_dir.exists() {
+            fs::create_dir_all(&conf_dir)?;
         }
+
+        let conf_path = conf_dir.join("config.json");
+
+        if !conf_path.exists() {
+            fs::write(&conf_path, DEFAULT_CONF_FILE.to_string())?;
+        }
+
+        let prof_path = conf_dir.join("profile");
+
+        if !prof_path.exists() {
+            fs::create_dir_all(&prof_path)?;
+        }
+
+        let default_prof_path = prof_path.join("default.json");
+
+        if !default_prof_path.exists() {
+            fs::write(&default_prof_path, DEFAULT_PROFILE.to_string())?;
+        }
+
         Ok(self)
     }
 
-    pub fn run_app(self) {
-        if self.is_edit {
-            let Some(conf_dir) = dirs::config_dir() else {
-                eprintln!("Cannot find config directory");
-                return;
-            };
-            let conf_dir = conf_dir.join("emoji-commit");
-            let Ok(Config { profile }) = serde_json::from_reader(BufReader::new(
-                File::open(conf_dir.join("config.json")).unwrap(),
-            )) else {
-                eprintln!("Could not open config file");
-                return;
-            };
-            command_processor::open_editor(&format!("{}.json", &profile));
-        } else if let Some(new_profile) = self.args.set_profile {
-            let Some(conf_dir) = dirs::config_dir() else {
-                eprintln!("Cannot find config directory");
-                return;
-            };
-            let conf_dir = conf_dir.join("emoji-commit");
-            let Ok(Config { profile: _ }) = serde_json::from_reader(BufReader::new(
-                File::open(conf_dir.join("config.json")).unwrap(),
-            )) else {
-                eprintln!("Could not open config file");
-                return;
-            };
+    fn edit_config(&self, path: &Path) {
+        let Ok(Config { profile }) =
+            serde_json::from_reader(BufReader::new(File::open(path).unwrap()))
+        else {
+            eprintln!("ec terminated: invalid config");
+            eprintln!("cause: invalid profile name");
+            return;
+        };
+
+        if let Err(e) = cmd::open_editor(&format!("{}.json", &profile)) {
+            eprintln!("ec terminated: couldn't open of editor");
+            eprintln!("cause: {}", e.kind());
+        }
+    }
+
+    fn set_profile(&self, new_profile: &str, conf_dir: &Path) {
+        let new_conf = json!(Config {
+            profile: new_profile.to_string()
+        });
+
+        fs::write(conf_dir.join("config.json"), new_conf.to_string()).unwrap();
+
+        let prof_dir_path = conf_dir.join("profile");
+        let new_prof_path = prof_dir_path.join(format!("{}.json", new_profile));
+
+        if !new_prof_path.exists() {
+            fs::copy(prof_dir_path.join("default.json"), new_prof_path).unwrap();
+            println!("Create new profile: {}", new_profile);
+        } else {
+            println!("Switch profile: {}", new_profile);
+        }
+    }
+
+    fn delete_profile(&self, delete_prof: &str, conf_dir: &Path) {
+        let Ok(Config { profile }) = serde_json::from_reader(BufReader::new(
+            File::open(conf_dir.join("config.json")).unwrap(),
+        )) else {
+            eprintln!("ec terminated: invalid config");
+            eprintln!("cause: invalid profile name");
+            return;
+        };
+
+        if profile == delete_prof {
             let new_conf = json!(Config {
-                profile: new_profile.clone()
+                profile: String::from("default"),
             });
             fs::write(conf_dir.join("config.json"), new_conf.to_string()).unwrap();
-            let prof_dir_path = conf_dir.join("profile");
-            let new_prof_path = prof_dir_path.join(format!("{}.json", new_profile));
-            if !new_prof_path.exists() {
-                fs::copy(prof_dir_path.join("default.json"), new_prof_path).unwrap();
-                println!("Create new profile: {}", new_profile);
-            } else {
-                println!("Switch profile: {}", new_profile);
-            }
-        } else if let Some(delete_prof) = self.args.delete_profile {
-            let Some(conf_dir) = dirs::config_dir() else {
-                eprintln!("Cannot find config directory");
-                return;
-            };
-            let conf_dir = conf_dir.join("emoji-commit");
-            let Ok(Config { profile }) = serde_json::from_reader(BufReader::new(
-                File::open(conf_dir.join("config.json")).unwrap(),
-            )) else {
-                eprintln!("Could not open config file");
-                return;
-            };
-            if profile == delete_prof {
-                let new_conf = json!(Config {
-                    profile: String::from("default"),
-                });
-                fs::write(conf_dir.join("config.json"), new_conf.to_string()).unwrap();
-                println!("Switch profile: default");
-            }
+            println!("Switch profile: default");
+        }
 
-            let profile_dir = conf_dir.join("profile");
-            let target_profile_path = profile_dir.join(format!("{}.json", delete_prof));
-            if target_profile_path.exists() {
-                fs::remove_file(target_profile_path).unwrap();
-                println!("Profile removed: {}", delete_prof);
-            } else {
-                eprintln!("Profile \"{}\" is Not found.", delete_prof);
-            }
-        } else if self.args.list_profile {
-            let Some(conf_dir) = dirs::config_dir() else {
-                eprintln!("Cannot find config directory");
-                return;
-            };
-            let prof_dir = conf_dir.join("emoji-commit").join("profile");
-            let Ok(Config { profile }) = serde_json::from_reader(BufReader::new(
-                File::open(conf_dir.join("emoji-commit").join("config.json")).unwrap(),
-            )) else {
-                eprintln!("Could not open config file");
-                return;
-            };
-            fs::read_dir(prof_dir).unwrap().for_each(|entry| {
-                if let Ok(entry) = entry {
-                    if let Some(stem) = entry.path().file_stem() {
-                        if let Some(stem) = stem.to_str() {
-                            print!("{stem}");
-                            if profile == stem {
-                                print!(" (Current)");
-                            }
-                            println!();
-                        }
-                    }
-                }
-            });
-        } else if self.args.list_tags {
-            let Some(conf_dir) = dirs::config_dir() else {
-                eprintln!("Cannot find config directory");
-                return;
-            };
-            let conf_dir = conf_dir.join("emoji-commit");
-            let Ok(Config { profile }) = serde_json::from_reader(BufReader::new(
-                File::open(conf_dir.join("config.json")).unwrap(),
-            )) else {
-                eprintln!("Could not open config file");
-                return;
-            };
-            let profile_path = conf_dir.join("profile").join(format!("{}.json", &profile));
-            let Ok(prefs): Result<Vec<PrefMap>, _> =
-                serde_json::from_reader(BufReader::new(File::open(profile_path).unwrap()))
-            else {
-                eprintln!("Could not open profile file");
-                return;
-            };
-            let prefs: Vec<_> = prefs.into_iter().map(|p| p.key).collect();
-            prefs.iter().for_each(|p| {
-                println!("{p}");
-            });
+        let target_profile_path = conf_dir
+            .join("profile")
+            .join(format!("{}.json", delete_prof));
+
+        if target_profile_path.exists() {
+            fs::remove_file(target_profile_path).unwrap();
+            println!("Profile removed: {}", delete_prof);
         } else {
-            let args = (self.args.prefix, self.args.msg);
-            if let (Some(key), Some(msg)) = args {
-                if let Some(conf_path) = dirs::config_dir() {
-                    let conf_path = conf_path.join("emoji-commit");
-                    let conf_file_path = conf_path.join("config.json");
-                    let config: Config = serde_json::from_reader(BufReader::new(
-                        File::open(&conf_file_path).unwrap(),
-                    ))
-                    .expect("Could not open config");
-                    let mut current_profile = config.profile.as_str();
-                    let profile_dir_path = conf_path.join("profile");
-                    if !profile_dir_path
-                        .join(format!("{}.json", current_profile))
-                        .exists()
-                    {
-                        eprintln!(
-                            "Could not find {current_profile} profile: using default profile."
-                        );
-                        current_profile = "default";
-                    }
-                    let json: Vec<PrefMap> = serde_json::from_reader(BufReader::new(
-                        File::open(profile_dir_path.join(format!("{}.json", current_profile)))
-                            .unwrap(),
-                    ))
-                    .expect("Could not open profile");
-                    let map = json.into_iter().find(|p| p.key == key);
-                    if let Some(map) = map {
-                        let msg = format!("{}{}", &map.prefix, msg);
-                        command_processor::git_commit(msg);
-                    } else {
-                        eprintln!("Could not create commit: invalid arguments \"{}\"", key);
-                    }
+            eprintln!("Profile \"{}\" is Not found.", delete_prof);
+        }
+    }
+
+    fn list_profile(&self, conf_dir: &Path) {
+        let prof_dir = conf_dir.join("profile");
+
+        let Ok(Config { profile }) = serde_json::from_reader(BufReader::new(
+            File::open(conf_dir.join("config.json")).unwrap(),
+        )) else {
+            eprintln!("ec terminated: invalid config");
+            return;
+        };
+
+        fs::read_dir(prof_dir).unwrap().for_each(|entry| {
+            if let Some(stem) = entry
+                .ok()
+                .and_then(|e| e.path().file_stem().map(|s| s.to_owned()))
+                .map(|e| e.to_string_lossy().to_string())
+            {
+                print!("{stem}");
+                if profile == stem {
+                    print!(" (Current)");
                 }
-            } else {
-                eprintln!("Could not create commit: invalid arguments");
+                println!();
             }
+        });
+    }
+
+    fn list_tags(&self, conf_dir: &Path) {
+        let Ok(Config { profile }) = serde_json::from_reader(BufReader::new(
+            File::open(conf_dir.join("config.json")).unwrap(),
+        )) else {
+            eprintln!("ec terminated: invalid config");
+            eprintln!("cause: invalid profile name");
+            return;
+        };
+
+        let profile_path = conf_dir.join("profile").join(format!("{}.json", &profile));
+
+        let Ok(prefs): Result<Vec<PrefMap>, _> =
+            serde_json::from_reader(BufReader::new(File::open(profile_path).unwrap()))
+        else {
+            eprintln!("ec terminated: invalid profile content");
+            return;
+        };
+
+        prefs
+            .into_iter()
+            .map(|p| p.key)
+            .for_each(|p| println!("{p}"));
+    }
+
+    fn create_commit(&self, key: &str, msg: &str, conf_path: &Path) {
+        let conf_file_path = conf_path.join("config.json");
+        let Ok(Config { profile }) =
+            serde_json::from_reader(BufReader::new(File::open(&conf_file_path).unwrap()))
+        else {
+            eprintln!("ec terminated: invalid config");
+            eprintln!("cause: invalid profile name");
+            return;
+        };
+        let mut current_profile = profile.as_str();
+        let profile_dir_path = conf_path.join("profile");
+
+        if !profile_dir_path
+            .join(format!("{}.json", current_profile))
+            .exists()
+        {
+            eprintln!("profile not found: using to default");
+            current_profile = "default";
+        }
+
+        let Ok(json): Result<Vec<PrefMap>, serde_json::Error> =
+            serde_json::from_reader(BufReader::new(
+                File::open(profile_dir_path.join(format!("{}.json", current_profile))).unwrap(),
+            ))
+        else {
+            eprintln!("ec terminated: invalid profile content");
+            return;
+        };
+
+        let map = json.into_iter().find(|p| p.key == *key);
+
+        if let Some(map) = map {
+            let msg = format!("{}{}", &map.prefix, msg);
+            cmd::git_commit(msg);
+        } else {
+            eprintln!("ec terminated: \"{}\" is invalid argument", key);
+        }
+    }
+
+    pub fn run_app(self) {
+        let conf_dir = config_dir_path().join("emoji-commit");
+
+        if self.is_edit {
+            let path = conf_dir.join("config.json");
+
+            self.edit_config(&path);
+            return;
+        }
+
+        if let Some(ref new_profile) = self.args.set_profile {
+            self.set_profile(new_profile, &conf_dir);
+        }
+
+        if let Some(ref delete_prof) = self.args.delete_profile {
+            self.delete_profile(delete_prof, &conf_dir);
+        }
+
+        if self.args.list_profile {
+            self.list_profile(&conf_dir);
+        }
+
+        if self.args.list_tags {
+            self.list_tags(&conf_dir);
+        }
+
+        if let (Some(key), Some(msg)) = (&self.args.prefix, &self.args.msg) {
+            self.create_commit(key, msg, &conf_dir);
         }
     }
 }
